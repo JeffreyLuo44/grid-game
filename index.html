@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide">
+    <title>Grid Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column; 
+            font-family: "Audiowide", sans-serif;
+        }
+        button {
+            font-family: "Audiowide", sans-serif;
+            font-size: 16px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(8, 40px);
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            background-color: #eee;
+            border: 1px solid #544c4c;
+        }
+        .piece {
+            width: 40px;
+            height: 40px;
+            margin: 5px;
+            display: inline-block;
+            border: 1px solid #544c4c;
+        }
+        #pieces {
+            position: relative;
+            left: -45px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Jeffrey's Grid Game</h2>
+    <div class="game-over" id="game-over" style="display: none;">
+        <p>Game Over!</p>
+        <p>You scored <span id="game-over-points">0</span> points!</p>
+    </div>
+    <button id="play-again-button" style="display: none;">Play Again</button>
+    <div class="points-container">
+        <button id="reset-button" onClick="resetGame()">Reset</button>
+        <p>Points: <span id="points">0</span> &nbsp;&nbsp;&nbsp;&nbsp;
+            &nbsp;&nbsp;&nbsp;&nbsp; High Score: <span id="high-score">0</span></p>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="pieces" id="pieces"></div>
+
+    <script>
+        const playAgainButton = document.getElementById('play-again-button');
+
+        playAgainButton.addEventListener('click', () => {
+            resetGame();
+        });
+
+        const numRows = 8;
+        const numCols = 8;
+        const grid = document.getElementById('grid');
+        const piecesContainer = document.getElementById('pieces');
+        const pointsDisplay = document.getElementById('points');
+        const highScoreDisplay = document.getElementById('high-score');
+        let points = 0;
+        // Added two variables to track the currently dragged piece and cursor offset
+        let offsetX = 0;
+        let offsetY = 0;
+
+        const placeholderPiece = document.createElement('div');
+        placeholderPiece.className = 'piece';
+        placeholderPiece.style.backgroundColor = 'transparent'; 
+        placeholderPiece.style.border = 'transparent';
+        placeholderPiece.style.width = '40px'; 
+        placeholderPiece.style.height = '160px'; // Set a fixed height (4 times the grid cell height)
+        piecesContainer.appendChild(placeholderPiece);
+
+        const gameGrid = createGrid(numRows, numCols);
+
+        // Define predefined pieces
+        const predefinedPieces = [
+            { width: 1, height: 1 },
+            { width: 3, height: 2 },
+            { width: 3, height: 3 },
+            { width: 3, height: 1 },
+            { width: 2, height: 2 },
+            { width: 5, height: 1 },
+            { width: 1, height: 4 }
+            // [[1], [1]], [],
+        ];
+
+        // Create and add random pieces
+        for (let i = 0; i < 3; i++) {
+            const randomPiece = getRandomPiece(predefinedPieces);
+            createPiece(randomPiece.width, randomPiece.height, i);
+        }
+
+        function createGrid(rows, cols) {
+            const gridArray = new Array(rows).fill(null).map(() => new Array(cols).fill(null));
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${row}-${col}`;
+                    grid.appendChild(cell);
+                    gridArray[row][col] = cell;
+                }
+            }
+
+            return gridArray;
+        }
+
+        function createPiece(width, height, i) {
+            const piece = document.createElement('div');
+            piece.className = 'piece';
+            piece.draggable = true;
+            piece.dataset.width = width;
+            piece.dataset.id = `piece${i + 1}`;
+            piece.dataset.height = height;
+            piece.style.backgroundColor = getRandomColor();
+            piece.style.width = `${width * 40}px`;
+            piece.style.height = `${height * 40}px`; 
+            piecesContainer.appendChild(piece);
+        }
+
+        function getRandomColor() {
+            const colors = ['red', 'green', 'blue', 'yellow', 'purple', 'orange', 'pink'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        function getRandomPiece(pieces) {
+            const randomIndex = Math.floor(Math.random() * pieces.length);
+            return pieces[randomIndex];
+        }
+
+        function addRandomPiece(i) {
+            const randomPiece = getRandomPiece(predefinedPieces);
+            createPiece(randomPiece.width, randomPiece.height, i);
+        }
+
+        function addRandomPieces(count) {
+            for (let i = 0; i < count; i++) {
+                addRandomPiece(i);
+            }
+        }
+
+        grid.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        grid.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const color = e.dataTransfer.getData('color');
+            const pieceId = e.dataTransfer.getData('id');
+            const pieceWidth = parseInt(e.dataTransfer.getData('width'), 10);
+            const pieceHeight = parseInt(e.dataTransfer.getData('height'), 10);
+
+            // Calculate the coordinates where the piece should be dropped
+            const dropX = e.clientX - offsetX + 20; // Adjust the values to center the piece
+            const dropY = e.clientY - offsetY + 20; // Adjust the values to center the piece
+        
+            // Find the cell at the drop coordinates
+            const cell = document.elementFromPoint(dropX, dropY);
+
+            if (cell && cell.classList.contains('cell') && cell.style.backgroundColor === '') {
+                if (canPlacePiece(cell, pieceWidth, pieceHeight)) {
+                    let piecePoints = 0;
+                    cell.style.backgroundColor = color;
+
+                    // Set dimensions for all cells the piece occupies
+                    const [startRow, startCol] = getCellPosition(cell);
+                    for (let row = startRow; row < startRow + pieceHeight; row++) {
+                        for (let col = startCol; col < startCol + pieceWidth; col++) {
+                            const gridCell = gameGrid[row][col];
+                            gridCell.style.backgroundColor = color;
+                            piecePoints++;
+                        }
+                    }
+                    points += piecePoints;
+                    pointsDisplay.textContent = points;
+                    const pieceToRemove = document.querySelector(`[data-id="${pieceId}"]`);
+                    if (pieceToRemove) {
+                        pieces.removeChild(pieceToRemove); // Remove the piece from the pieces container
+                    }
+                    checkRowsAndColumns();
+
+                    if (piecesContainer.children.length === 1) {
+                        addRandomPieces(3);
+                    }
+
+                    if (checkGameOver()) {
+                        showGameOver();
+                    }
+                }
+            }
+        });
+
+        function addNewRandomPieces() {
+            for (let i = 0; i < 3; i++) {
+                const randomPiece = getRandomPiece(predefinedPieces);
+                createPiece(randomPiece.width, randomPiece.height, i);
+            }
+        }
+
+        piecesContainer.addEventListener('dragstart', (e) => {
+            // Calculate the offset relative to the piece's top-left corner
+            offsetX = e.clientX - e.target.getBoundingClientRect().left;
+            offsetY = e.clientY - e.target.getBoundingClientRect().top;
+
+            e.dataTransfer.setData('color', e.target.style.backgroundColor);
+            e.dataTransfer.setData('width', e.target.dataset.width);
+            e.dataTransfer.setData('height', e.target.dataset.height);
+            e.dataTransfer.setData('id', e.target.dataset.id);
+        });
+
+        function canPlacePiece(cell, width, height) {
+            const [row, col] = getCellPosition(cell);
+            if (row + height > numRows || col + width > numCols) {
+                return false;
+            }
+
+            for (let i = 0; i < height; i++) {
+                for (let j = 0; j < width; j++) {
+                    const targetCell = gameGrid[row + i][col + j];
+                    if (targetCell.style.backgroundColor !== '') {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        function getCellPosition(cell) {
+            const [row, col] = cell.id.split('-').slice(1).map(Number);
+            return [row, col];
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function checkRowsAndColumns() {
+            for (let row = 0; row < numRows; row++) {
+                const rowCells = gameGrid[row];
+                if (rowCells.every(cell => cell.style.backgroundColor !== '')) {
+                    // All cells in the row are occupied
+                    rowCells.forEach(cell => {
+                        cell.style.backgroundColor = '';
+                        cell.classList.add('cell'); // Add the cell class back
+                    });
+                    points += 10;
+                }
+            }
+
+            for (let col = 0; col < numCols; col++) {
+                const colCells = gameGrid.map(row => row[col]);
+                if (colCells.every(cell => cell.style.backgroundColor !== '')) {
+                    // All cells in the column are occupied
+                    colCells.forEach(cell => {
+                        cell.style.backgroundColor = '';
+                        cell.classList.add('cell'); // Add the cell class back
+                    });
+                    points += 10;
+                }
+            }
+
+            pointsDisplay.textContent = points;
+        }
+
+        function checkGameOver() {
+            const pieces = document.querySelectorAll('.pieces .piece');
+            const gridCells = document.querySelectorAll('.grid .cell');
+            let placeholderPiece = true;
+            for (const piece of pieces) {
+                if (placeholderPiece === false) {
+                    const width = parseInt(piece.dataset.width, 10);
+                    const height = parseInt(piece.dataset.height, 10);
+                    for (const cell of gridCells) {
+                        if (canPlacePiece(cell, width, height)) {
+                            return false; // There's at least one piece that can be placed
+                        }
+                    }
+                } else {
+                    placeholderPiece = false;
+                }
+            }
+            return true; // No piece can be placed
+        }
+
+        function showGameOver() {
+            if (points > Number(highScoreDisplay.textContent)){
+                highScoreDisplay.textContent = points;
+            }
+            const gameOverElement = document.getElementById('game-over');
+            const gameOverPointsElement = document.getElementById('game-over-points');
+            gameOverPointsElement.textContent = points;
+            gameOverElement.style.display = 'block';
+            document.getElementById("reset-button").style.display = 'none';
+
+            // Show the "Play Again" button
+            playAgainButton.style.display = 'block';
+        }
+
+        function resetGame() {
+            document.getElementById("reset-button").style.display = 'block';
+            // Clear the grid
+            clearGrid();
+
+            // Reset points
+            points = 0;
+            pointsDisplay.textContent = points;
+
+            // Remove all pieces except the placeholder piece
+            const pieces = document.querySelectorAll('.pieces .piece');
+            pieces.forEach(piece => {
+                if (piece !== placeholderPiece) {
+                    piece.remove();
+                }
+            });
+
+            const gameOverElement = document.getElementById('game-over');
+            gameOverElement.style.display = 'none';
+            playAgainButton.style.display = 'none';
+
+            // Add new random pieces
+            addRandomPieces(3);
+        }
+
+        function clearGrid() {
+            const gridCells = document.querySelectorAll('.grid .cell');
+            gridCells.forEach(cell => {
+                cell.style.backgroundColor = '';
+                cell.classList.add('cell');
+            });
+        }
+    </script>
+</body>
+</html>
